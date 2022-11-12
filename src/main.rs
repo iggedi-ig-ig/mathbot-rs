@@ -2,12 +2,10 @@ pub mod latex;
 
 use log::{debug, error, info, warn, LevelFilter};
 use serenity::async_trait;
-use serenity::builder::CreateMessage;
 use serenity::model::event::MessageUpdateEvent;
 use serenity::model::gateway::Ready;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
-use serenity::utils::MessageBuilder;
 use std::borrow::Cow;
 
 const TOKEN: &str = include_str!("../token.txt");
@@ -23,16 +21,17 @@ impl EventHandler for Handler {
 
         let content = &message.content;
 
-        // message is latex
-        if content.find('$') != content.rfind('$') {
-            // message contains at least $ twice
+        // message is latex (contains '$' at least twice)
+        if content.find(|a| a == '$') != content.rfind(|a| a == '$') {
+            info!("Got latex");
 
-            match latex::generator::generate_png_api(
-                &latex::TEMPLATE.replace("#CONTENT", &format!(r"{:?}", content)),
-                message.id,
-            )
-            .await
-            {
+            let latex = latex::TEMPLATE
+                .replace(r"<textcolor>", r"DBDBDB")
+                .replace(r"<bgcolor>", r"36393E")
+                .replace(r"<content>", content);
+            let formula_result = latex::generate_png(&latex, message.id).await;
+
+            match formula_result {
                 Ok(image) => {
                     message
                         .channel_id
@@ -40,42 +39,35 @@ impl EventHandler for Handler {
                             &ctx,
                             Some(AttachmentType::Bytes {
                                 data: Cow::Owned(image),
-                                filename: "formula.png".to_string(),
+                                filename: String::from("formula.png"),
                             }),
-                            |m| m.content("formula"),
+                            |m| m.content(""),
                         )
                         .await
                         .expect("failed to send message");
                 }
                 Err(why) => {
-                    let mut msg_builder = MessageBuilder::new();
-
-                    msg_builder.push_line("Malformed LaTeX detected:");
-                    msg_builder.push_codeblock(&format!("{why:?}")[0..1900], None);
+                    error!("error: {why:?}");
 
                     message
-                        .reply_mention(&ctx, msg_builder)
+                        .channel_id
+                        .send_files(
+                            &ctx,
+                            Some(AttachmentType::Bytes {
+                                data: Cow::Owned(format!("{why:?}").as_bytes().to_vec()),
+                                filename: String::from("log.txt"),
+                            }),
+                            |m| m.content("error log"),
+                        )
                         .await
-                        .expect("failed to reply to message");
+                        .expect("failed to reply to message after error");
                     return;
                 }
-            }
-
-            let Ok(image) = latex::generator::generate_png_api(
-                &latex::TEMPLATE.replace("#CONTENT", r#"$\forall x \in \mathbb{R}$"#),
-                message.id,
-            )
-            .await else {
-                return;
-            };
-
-            if let Err(why) = message.reply(&ctx, "LaTeX detected!").await {
-                warn!("failed to reply to message: {why:?}");
             }
         }
     }
 
-    async fn message_update(&self, _ctx: Context, message_update_event: MessageUpdateEvent) {
+    async fn message_update(&self, _ctx: Context, _message_update_event: MessageUpdateEvent) {
         // info!("got message update: {:?}", message_update_event);
 
         // TODO: support message updates
@@ -92,7 +84,7 @@ async fn main() {
         .filter_module("mathbot_rs", LevelFilter::Debug)
         .init();
 
-    debug!("Token: {TOKEN}");
+    // debug!("Token: {TOKEN}");
 
     let intents = GatewayIntents::MESSAGE_CONTENT | GatewayIntents::GUILD_MESSAGES;
 

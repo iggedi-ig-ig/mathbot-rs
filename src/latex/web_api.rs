@@ -1,3 +1,4 @@
+use crate::latex::{API_URL, DENSITY, QUALITY};
 use anyhow::{Error, Result};
 use log::debug;
 use reqwest::Client;
@@ -5,8 +6,6 @@ use serde::{Deserialize, Serialize};
 use serenity::model::prelude::*;
 use std::fs::File;
 use std::io::Write;
-
-const API_URL: &str = "https://rtex.probablyaweb.site/api/v2";
 
 #[derive(Serialize, Clone, Debug)]
 struct ApiCompilePayload<'a> {
@@ -17,8 +16,8 @@ struct ApiCompilePayload<'a> {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-#[serde(rename_all = "lowercase")]
-#[serde(tag = "status")]
+#[serde(rename_all = "lowercase", tag = "status")]
+#[allow(dead_code)]
 enum CompileResponse {
     Success { log: String, filename: String },
     Error { description: String, log: String },
@@ -37,8 +36,8 @@ pub async fn generate_png_api(code: &str, message_id: MessageId) -> Result<Vec<u
         .json(&dbg!(ApiCompilePayload {
             format: "png",
             code,
-            density: 350,
-            quality: 100,
+            density: DENSITY,
+            quality: QUALITY,
         }))
         .send()
         .await?
@@ -63,6 +62,6 @@ pub async fn generate_png_api(code: &str, message_id: MessageId) -> Result<Vec<u
 
             Ok(file_bytes.to_vec())
         }
-        a => Err(Error::msg("")),
+        a => Err(Error::msg(format!("{a:?}"))),
     }
 }
